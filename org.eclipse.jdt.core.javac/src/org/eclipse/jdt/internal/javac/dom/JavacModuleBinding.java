@@ -194,7 +194,11 @@ public abstract class JavacModuleBinding implements IModuleBinding {
 			JavacPackageBinding tmp = this.resolver.bindings.getPackageBinding(arr[i].packge);
 			if( tmp.isUnnamed() == packageBinding.isUnnamed() &&
 					tmp.getName().equals(packageBinding.getName())) {
-				return arr[i].getTargetModules().stream().map(ModuleSymbol::toString).toArray(String[]::new);
+				var targets = arr[i].getTargetModules();
+	            if (targets == null) {
+	                return new String[0];
+	            }
+				return targets.stream().map(ModuleSymbol::toString).toArray(String[]::new);
 			}
 		}
 		return new String[0];
