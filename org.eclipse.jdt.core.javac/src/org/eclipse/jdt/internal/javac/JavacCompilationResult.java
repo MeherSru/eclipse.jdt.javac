@@ -99,6 +99,8 @@ public class JavacCompilationResult extends CompilationResult {
 			this.noEffectAssignments = new ArrayList<>();
 		}
 		this.noEffectAssignments.addAll(problems);
+	}
+
 	public void addUnclosedCloseables(List<CategorizedProblem> problems) {
 		if (this.unclosedCloseables == null) {
 			this.unclosedCloseables = new ArrayList<>();

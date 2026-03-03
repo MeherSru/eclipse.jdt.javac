@@ -245,6 +245,7 @@ public class JavacResolverTaskListener implements TaskListener {
 		List<CategorizedProblem> noEffectAssignments = scanner.getNoEffectAssignments(unusedProblemFactory);
 		if (!noEffectAssignments.isEmpty()) {
 			allUnusedProblems.addAll(noEffectAssignments);
+		}
 
 		List<CategorizedProblem> unclosedCloseables = scanner.getUnclosedCloseables(unusedProblemFactory);
 		if (!unclosedCloseables.isEmpty()) {
