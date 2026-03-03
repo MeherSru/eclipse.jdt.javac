@@ -33,6 +33,7 @@ public class JavacCompilationResult extends CompilationResult {
 	private List<CategorizedProblem> unusedImports = null;
 	private List<CategorizedProblem> unnecessaryCasts = null;
 	private List<CategorizedProblem> noEffectAssignments = null;
+	private List<CategorizedProblem> unclosedCloseables = null;
 	private List<CategorizedProblem> accessRestrictionProblems = null;
 
 	public JavacCompilationResult(ICompilationUnit compilationUnit) {
@@ -98,6 +99,11 @@ public class JavacCompilationResult extends CompilationResult {
 			this.noEffectAssignments = new ArrayList<>();
 		}
 		this.noEffectAssignments.addAll(problems);
+	public void addUnclosedCloseables(List<CategorizedProblem> problems) {
+		if (this.unclosedCloseables == null) {
+			this.unclosedCloseables = new ArrayList<>();
+		}
+		this.unclosedCloseables.addAll(problems);
 	}
 
 	public void setAccessRestrictionProblems(List<CategorizedProblem> problems) {
@@ -105,7 +111,8 @@ public class JavacCompilationResult extends CompilationResult {
 	}
 
 	public List<CategorizedProblem> getAdditionalProblems() {
-		if (this.unusedMembers == null && this.unusedImports == null && this.unnecessaryCasts == null && this.accessRestrictionProblems == null) {
+		if (this.unusedMembers == null && this.unusedImports == null && this.unnecessaryCasts == null
+				&& this.unclosedCloseables == null && this.accessRestrictionProblems == null) {
 			return null;
 		}
 
@@ -118,6 +125,9 @@ public class JavacCompilationResult extends CompilationResult {
 		}
 		if (this.unnecessaryCasts != null) {
 			problems.addAll(this.unnecessaryCasts);
+		}
+		if (this.unclosedCloseables != null) {
+			problems.addAll(this.unclosedCloseables);
 		}
 		if (this.accessRestrictionProblems != null) {
 			problems.addAll(this.accessRestrictionProblems);

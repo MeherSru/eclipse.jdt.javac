@@ -19,6 +19,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Set;
 
@@ -33,12 +34,16 @@ import com.sun.source.tree.AssignmentTree;
 import com.sun.source.tree.ClassTree;
 import com.sun.source.tree.CompilationUnitTree;
 import com.sun.source.tree.IdentifierTree;
+import com.sun.source.tree.IfTree;
 import com.sun.source.tree.ImportTree;
+import com.sun.source.tree.LambdaExpressionTree;
 import com.sun.source.tree.MemberReferenceTree;
 import com.sun.source.tree.MemberSelectTree;
+import com.sun.source.tree.MethodInvocationTree;
 import com.sun.source.tree.MethodTree;
 import com.sun.source.tree.NewClassTree;
 import com.sun.source.tree.Tree;
+import com.sun.source.tree.TryTree;
 import com.sun.source.tree.TypeCastTree;
 import com.sun.source.tree.VariableTree;
 import com.sun.source.util.TreeScanner;
@@ -65,8 +70,10 @@ import com.sun.tools.javac.tree.JCTree.JCImport;
 import com.sun.tools.javac.tree.JCTree.JCLiteral;
 import com.sun.tools.javac.tree.JCTree.JCMemberReference;
 import com.sun.tools.javac.tree.JCTree.JCMethodDecl;
+import com.sun.tools.javac.tree.JCTree.JCMethodInvocation;
 import com.sun.tools.javac.tree.JCTree.JCNewArray;
 import com.sun.tools.javac.tree.JCTree.JCNewClass;
+import com.sun.tools.javac.tree.JCTree.JCTry;
 import com.sun.tools.javac.tree.JCTree.JCTypeCast;
 import com.sun.tools.javac.tree.JCTree.JCVariableDecl;
 
@@ -80,6 +87,11 @@ public class UnusedTreeScanner<R, P> extends TreeScanner<R, P> {
 	private boolean classSuppressUnused = false;
 	private boolean methodSuppressUnused = false;
 	private boolean lhsInAssignment = false;
+
+	record CloseableState(int declBranchDepth, int declCallableDepth, boolean potential) {}
+	final Map<VarSymbol, CloseableState> unclosedCloseables = new LinkedHashMap<>();
+	private int branchDepth = 0;
+	private int callableDepth = 0;
 
 	private final UnusedDocTreeScanner unusedDocTreeScanner = new UnusedDocTreeScanner();
 
@@ -173,6 +185,13 @@ public class UnusedTreeScanner<R, P> extends TreeScanner<R, P> {
 	@Override
 	public R visitAssignment(AssignmentTree node, P p) {
 		if (node instanceof JCAssign assign) {
+			if (assign.lhs instanceof JCIdent ident
+				&& ident.sym instanceof VarSymbol varSym
+				&& assign.rhs instanceof JCNewClass newClass
+				&& (implementsInterface(newClass.type, "java.lang.AutoCloseable")
+					|| implementsInterface(newClass.type, "java.io.Closeable"))) {
+				this.unclosedCloseables.put(varSym, new CloseableState(this.branchDepth, this.callableDepth, false));
+			}
 			scan(assign.rhs, p);
 			this.lhsInAssignment = true;
 			scan(assign.lhs, p);
@@ -204,8 +223,80 @@ public class UnusedTreeScanner<R, P> extends TreeScanner<R, P> {
 		if (isPrivateMethod) {
 			this.privateDecls.add(node);
 		}
+		this.callableDepth++;
+		try {
+			return super.visitMethod(node, p);
+		} finally {
+			this.callableDepth--;
+		}
+	}
 
-		return super.visitMethod(node, p);
+	@Override
+	public R visitMethodInvocation(MethodInvocationTree node, P p) {
+		if (node instanceof JCMethodInvocation invocation
+			&& invocation.meth instanceof JCFieldAccess method
+			&& method.name.contentEquals("close")
+			&& method.selected instanceof JCIdent ident
+			&& ident.sym instanceof VarSymbol varSym) {
+				CloseableState closeableState = this.unclosedCloseables.get(varSym);
+				if (closeableState != null) {
+					if (this.callableDepth > closeableState.declCallableDepth()
+							|| this.branchDepth > closeableState.declBranchDepth()) {
+						if (!closeableState.potential()) {
+							this.unclosedCloseables.put(varSym, new CloseableState(
+									closeableState.declBranchDepth(), closeableState.declCallableDepth(), true));
+						}
+					} else {
+						// close() is at the same or outer scope as the declaration
+						this.unclosedCloseables.remove(varSym);
+					}
+				}
+			}
+		return super.visitMethodInvocation(node, p);
+	}
+
+	@Override
+	public R visitLambdaExpression(LambdaExpressionTree node, P p) {
+		this.callableDepth++;
+		try {
+			return super.visitLambdaExpression(node, p);
+		} finally {
+			this.callableDepth--;
+		}
+	}
+
+	@Override
+	public R visitIf(IfTree node, P p) {
+		scan(node.getCondition(), p);
+		this.branchDepth++;
+		scan(node.getThenStatement(), p);
+		scan(node.getElseStatement(), p);
+		this.branchDepth--;
+		return null;
+	}
+
+	@Override
+	public R visitTry(TryTree node, P p) {
+		List<VarSymbol> resourceSymbols = new ArrayList<>();
+		if (node instanceof JCTry jcTry) {
+			// resources in try-with-resources are automatically closed
+			for (JCTree resource : jcTry.resources) {
+				if (resource instanceof JCVariableDecl varDecl) {
+					resourceSymbols.add(varDecl.sym);
+				}
+			}
+		}
+		scan(node.getResources(), p);
+		for (VarSymbol resourceSymbol : resourceSymbols) {
+			this.unclosedCloseables.remove(resourceSymbol);
+		}
+		scan(node.getBlock(), p);
+		// catch/finally are branches
+		this.branchDepth++;
+		scan(node.getCatches(), p);
+		scan(node.getFinallyBlock(), p);
+		this.branchDepth--;
+		return null;
 	}
 
 	@Override
@@ -214,7 +305,13 @@ public class UnusedTreeScanner<R, P> extends TreeScanner<R, P> {
 		if (isPrivateVariable) {
 			this.privateDecls.add(node);
 		}
-
+		if (node instanceof JCVariableDecl varDecl
+			&& varDecl.sym instanceof VarSymbol varSym
+			&& varDecl.init instanceof JCNewClass newClass
+			&& (implementsInterface(newClass.type, "java.lang.AutoCloseable")
+				|| implementsInterface(newClass.type, "java.io.Closeable"))) {
+			this.unclosedCloseables.put(varSym, new CloseableState(this.branchDepth, this.callableDepth, false));
+		}
 		return super.visitVariable(node, p);
 	}
 
@@ -371,6 +468,18 @@ public class UnusedTreeScanner<R, P> extends TreeScanner<R, P> {
 		return false;
 	}
 
+	private boolean implementsInterface(Type type, String interfaceName) {
+		if (type == null || type.tsym == null) return false;
+		if (type.tsym.toString().equals(interfaceName)) return true;
+		if (type.tsym instanceof ClassSymbol classSymbol) {
+			for (Type iface : classSymbol.getInterfaces()) {
+				if (implementsInterface(iface, interfaceName)) return true;
+			}
+			return implementsInterface(classSymbol.getSuperclass(), interfaceName);
+		}
+		return false;
+	}
+
 	private boolean isPrivateSymbol(Symbol symbol) {
 		if (symbol instanceof ClassSymbol
 				|| symbol instanceof MethodSymbol) {
@@ -414,6 +523,14 @@ public class UnusedTreeScanner<R, P> extends TreeScanner<R, P> {
 
 	public List<CategorizedProblem> getUnnecessaryCasts(UnusedProblemFactory problemFactory) {
 		return problemFactory.addUnnecessaryCasts(unit, this.unnecessaryCasts);
+	}
+
+	public List<CategorizedProblem> getUnclosedCloseables(UnusedProblemFactory problemFactory) {
+		Map<VarSymbol, Boolean> unclosedCloseables = new LinkedHashMap<>();
+		for (Entry<VarSymbol, CloseableState> e : this.unclosedCloseables.entrySet()) {
+			unclosedCloseables.put(e.getKey(), e.getValue().potential());
+		}
+		return problemFactory.addUnclosedCloseables(unit, unclosedCloseables);
 	}
 
 	public List<CategorizedProblem> getUnusedPrivateMembers(UnusedProblemFactory problemFactory) {

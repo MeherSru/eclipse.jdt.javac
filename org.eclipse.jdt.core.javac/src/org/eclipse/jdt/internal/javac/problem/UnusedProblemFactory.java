@@ -35,9 +35,7 @@ import org.eclipse.jdt.internal.compiler.problem.ProblemSeverities;
 import com.sun.source.tree.CompilationUnitTree;
 import com.sun.source.tree.Tree;
 import com.sun.tools.javac.code.Symbol.VarSymbol;
-import com.sun.tools.javac.tree.JCTree.JCAssign;
 import com.sun.tools.javac.tree.JCTree.JCClassDecl;
-import com.sun.tools.javac.tree.JCTree.JCCompilationUnit;
 import com.sun.tools.javac.tree.JCTree.JCExpression;
 import com.sun.tools.javac.tree.JCTree.JCImport;
 import com.sun.tools.javac.tree.JCTree.JCMethodDecl;
@@ -264,6 +262,38 @@ public class UnusedProblemFactory {
 
 			CategorizedProblem problem = problemFactory.createProblem(fileName,
 					IProblem.AssignmentHasNoEffect,
+					arguments,
+					arguments,
+					severity, pos, endPos, line, column);
+			problems.add(problem);
+		}
+		return problems;
+	}
+
+	public List<CategorizedProblem> addUnclosedCloseables(CompilationUnitTree unit, Map<VarSymbol, Boolean> unclosedCloseables) {
+		if (unit == null) {
+			return Collections.emptyList();
+		}
+
+		final char[] fileName = unit.getSourceFile().getName().toCharArray();
+		List<CategorizedProblem> problems = new ArrayList<>();
+		for (Entry<VarSymbol, Boolean> entry : unclosedCloseables.entrySet()) {
+			VarSymbol varSym = entry.getKey();
+			int problemId = entry.getValue() ? IProblem.PotentiallyUnclosedCloseable : IProblem.UnclosedCloseable;
+			int severity = this.toSeverity(problemId);
+			if (severity == ProblemSeverities.Ignore || severity == ProblemSeverities.Optional) continue;
+
+			String varName = varSym.name.toString();
+			String[] arguments = new String[] { varName };
+
+			int pos = varSym.pos;
+			int endPos = pos + varName.length() - 1;
+
+			int line = (int) unit.getLineMap().getLineNumber(pos);
+			int column = (int) unit.getLineMap().getColumnNumber(pos);
+
+			CategorizedProblem problem = problemFactory.createProblem(fileName,
+					problemId,
 					arguments,
 					arguments,
 					severity, pos, endPos, line, column);

@@ -144,12 +144,15 @@ public class JavacResolverTaskListener implements TaskListener {
 					.getSeverityString(CompilerOptions.UnnecessaryTypeCheck).equals(CompilerOptions.IGNORE);
 		boolean noEffectAssignmentIgnored = objectCompilerOptions
 				    .getSeverityString(CompilerOptions.NoEffectAssignment).equals(CompilerOptions.IGNORE);
+		boolean unclosedCloseableIgnored = objectCompilerOptions
+				    .getSeverityString(CompilerOptions.UnclosedCloseable).equals(CompilerOptions.IGNORE);
 		if (!Options.instance(context).get(Option.XLINT_CUSTOM).contains("all")
 			    && unusedImportIgnored
 			    && unusedPrivateMemberIgnored
 			    && unusedLocalVariableIgnored
 				&& unnecessaryTypeCheckIgnored
-				&& noEffectAssignmentIgnored) {
+				&& noEffectAssignmentIgnored
+				&& unclosedCloseableIgnored) {
 			return;
 		}
 
@@ -242,6 +245,10 @@ public class JavacResolverTaskListener implements TaskListener {
 		List<CategorizedProblem> noEffectAssignments = scanner.getNoEffectAssignments(unusedProblemFactory);
 		if (!noEffectAssignments.isEmpty()) {
 			allUnusedProblems.addAll(noEffectAssignments);
+
+		List<CategorizedProblem> unclosedCloseables = scanner.getUnclosedCloseables(unusedProblemFactory);
+		if (!unclosedCloseables.isEmpty()) {
+			allUnusedProblems.addAll(unclosedCloseables);
 		}
 
 		return allUnusedProblems;
