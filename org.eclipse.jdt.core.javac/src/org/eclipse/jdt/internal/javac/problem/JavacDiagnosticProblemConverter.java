@@ -38,6 +38,7 @@ import org.eclipse.jdt.core.compiler.IProblem;
 import org.eclipse.jdt.core.dom.Modifier.ModifierKeyword;
 import org.eclipse.jdt.internal.compiler.classfmt.ClassFileConstants;
 import org.eclipse.jdt.internal.compiler.impl.CompilerOptions;
+import org.eclipse.jdt.internal.compiler.problem.DefaultProblemFactory;
 import org.eclipse.jdt.internal.compiler.problem.ProblemReporter;
 import org.eclipse.jdt.internal.compiler.problem.ProblemSeverities;
 
@@ -93,6 +94,7 @@ public class JavacDiagnosticProblemConverter {
 	private final CompilerOptions compilerOptions;
 	private final Context context;
 	private final Map<JavaFileObject, JCCompilationUnit> units = new HashMap<>();
+	private final DefaultProblemFactory problemFactory = new DefaultProblemFactory(Locale.getDefault());
 	private static final Pattern SOURCE_VERSION_EXTRACTOR = Pattern.compile("--?source ([-0-9]+)");;
 
 	public JavacDiagnosticProblemConverter(Map<String, String> options, Context context) {
@@ -147,9 +149,12 @@ public class JavacDiagnosticProblemConverter {
 			}
 		}
 		String[] arguments = getDiagnosticStringArguments(diagnostic);
+		String problemMessage = problemId == IProblem.UndefinedType
+				? this.problemFactory.getLocalizedMessage(IProblem.UndefinedType, new String[] { arguments[0] })
+				: diagnostic.getMessage(Locale.getDefault());
 		return new JavacProblem(
 				diagnostic.getSource().getName().toCharArray(),
-				diagnostic.getMessage(Locale.getDefault()),
+				problemMessage,
 				diagnostic.getCode(),
 				problemId,
 				arguments,
@@ -688,7 +693,7 @@ public class JavacDiagnosticProblemConverter {
 			case "compiler.warn.dangling.doc.comment" -> -1; // ignore
 			case "compiler.note.removal.filename", "compiler.note.deprecated.plural.additional",
 				 "compiler.note.removal.plural.additional", "compiler.note.unchecked.filename" -> -1; // ignore due to lack of position
-			case "compiler.err.expected" -> IProblem.ParsingErrorInsertTokenAfter;
+			case "compiler.err.expected" -> convertExpected(diagnostic);
 			case "compiler.err.expected2" -> IProblem.ParsingErrorInsertTokenBefore;
 			case "compiler.err.expected3" -> IProblem.ParsingErrorInsertToComplete;
 			case "compiler.err.unclosed.comment" -> IProblem.UnterminatedComment;
@@ -1311,6 +1316,17 @@ public class JavacDiagnosticProblemConverter {
 		}
 		return false;
 	}
+
+	private int convertExpected(Diagnostic<?> diagnostic) {
+		if (diagnostic instanceof JCDiagnostic jcDiagnostic) {
+			Object[] args = jcDiagnostic.getArgs();
+			if (args.length > 0 && "=".equals(String.valueOf(args[0]))) {
+				return -1;
+			}
+		}
+		return IProblem.ParsingErrorInsertTokenAfter;
+	}
+
 	// compiler.err.cant.resolve
 	private int convertUnresolved(Diagnostic<?> diagnostic) {
 		if (diagnostic instanceof JCDiagnostic jcDiagnostic) {
