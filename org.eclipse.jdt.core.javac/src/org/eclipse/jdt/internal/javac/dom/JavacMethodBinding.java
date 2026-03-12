@@ -695,6 +695,9 @@ public abstract class JavacMethodBinding implements IMethodBinding {
 					}
 				}
 			}
+			if (paramBinding == null) {
+			   paramBinding = this.resolver.resolveWellKnownType("java.lang.Object");
+			}
 			res[i] = paramBinding;
 		}
 		return maybeTrimEnumConstructorArgs(res);
