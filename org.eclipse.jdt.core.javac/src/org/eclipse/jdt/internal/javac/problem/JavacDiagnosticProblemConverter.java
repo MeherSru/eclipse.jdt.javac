@@ -240,20 +240,24 @@ public class JavacDiagnosticProblemConverter {
 		if (args.length >= 2 && args[0] instanceof ClassSymbol classSymbol) {
 			Types types = Types.instance(this.context);
 			VarSymbol enumConstant = classSymbol.owner instanceof VarSymbol owner && (owner.flags() & Flags.ENUM) != 0 ? owner : null;
-			boolean enumHasAbstractMembers = false;
+			boolean enumHasOwnAbstractMembers = false;
+			boolean enumHasConstants = false;
+			String enumConstantName = enumConstant != null ? enumConstant.name.toString() : null;
 			if (classSymbol.isEnum()) {
 				for (Symbol enclosed : classSymbol.getEnclosedElements()) {
-					if (enclosed instanceof MethodSymbol method && (method.flags() & Flags.ABSTRACT) != 0) {
-						enumHasAbstractMembers = true;
-						break;
+					if (!enumHasOwnAbstractMembers
+							&& enclosed instanceof MethodSymbol method
+							&& (method.flags() & Flags.ABSTRACT) != 0) {
+						enumHasOwnAbstractMembers = true;
+						continue;
 					}
-				}
-			}
-			String enumConstantName = enumConstant != null ? enumConstant.name.toString() : null;
-			if (enumConstantName == null && classSymbol != null && classSymbol.isEnum()) {
-				for (Symbol symbol : classSymbol.getEnclosedElements()) {
-					if (symbol instanceof VarSymbol variable && (variable.flags() & Flags.ENUM) != 0) {
-						enumConstantName = variable.name.toString();
+					if (enclosed instanceof VarSymbol variable && (variable.flags() & Flags.ENUM) != 0) {
+						enumHasConstants = true;
+						if (enumConstantName == null) {
+							enumConstantName = variable.name.toString();
+						}
+					}
+					if (enumHasOwnAbstractMembers && enumConstantName != null) {
 						break;
 					}
 				}
@@ -308,13 +312,16 @@ public class JavacDiagnosticProblemConverter {
 				}
 			}
 
+			boolean enumWithoutConstants = classSymbol.isEnum() && !enumHasConstants;
 			List<MethodSymbol> missingMethods = new ArrayList<>(methodsBySignature.values());
 			List<JavacProblem> allProblems = new ArrayList<>(missingMethods.size());
 			for (MethodSymbol missingMethod : missingMethods) {
-				JavacProblem convertedProblem;
-				if (enumConstant != null ||
-					(classSymbol.isEnum() && missingMethod.owner == classSymbol && (missingMethod.flags() & Flags.ABSTRACT) != 0) ||
-					enumHasAbstractMembers) {
+				ClassSymbol methodOwner = missingMethod.owner instanceof ClassSymbol owner ? owner : null;
+				boolean enumOwnAbstractMethod = classSymbol.isEnum()
+						&& (missingMethod.flags() & Flags.ABSTRACT) != 0
+						&& (methodOwner.getQualifiedName().contentEquals(classSymbol.getQualifiedName()));
+				JavacProblem convertedProblem = null;
+				if (enumConstant != null || (classSymbol.isEnum() && enumHasOwnAbstractMembers && enumHasConstants)) {
 					String[] arguments = new String[] {
 							missingMethod.name.toString(),
 							missingMethod.getParameters().toString(),
@@ -325,12 +332,22 @@ public class JavacDiagnosticProblemConverter {
 							diagnostic,
 							this.problemFactory.getLocalizedMessage(IProblem.EnumConstantMustImplementAbstractMethod, arguments),
 							arguments);
-				} else {
-					String ownerType = missingMethod.owner instanceof ClassSymbol ownerClass ? ownerClass.toString() : classSymbol.toString();
+				} else if (enumWithoutConstants && enumOwnAbstractMethod) {
 					String[] arguments = new String[] {
 							missingMethod.name.toString(),
 							missingMethod.getParameters().toString(),
-							ownerType,
+							classSymbol.toString()
+					};
+					convertedProblem = problemIdToJavacProblem(
+							IProblem.EnumAbstractMethodMustBeImplemented,
+							diagnostic,
+							this.problemFactory.getLocalizedMessage(IProblem.EnumAbstractMethodMustBeImplemented, arguments),
+							arguments);
+				} else if (!enumWithoutConstants || !enumHasOwnAbstractMembers) {
+					String[] arguments = new String[] {
+							missingMethod.name.toString(),
+							missingMethod.getParameters().toString(),
+							methodOwner != null ? methodOwner.toString() : classSymbol.toString(),
 							classSymbol.toString()
 					};
 					convertedProblem = problemIdToJavacProblem(
