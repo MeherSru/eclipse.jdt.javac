@@ -182,6 +182,7 @@ public class JavacDiagnosticProblemConverter {
 		}
 		String[] arguments = argumentsOverride != null ? argumentsOverride : getDiagnosticStringArguments(diagnostic);
 		String problemMessage = messageOverride != null ? messageOverride : getProblemMessage(diagnostic, problemId, arguments, expectedEqualsFieldName);
+		int[] lineAndColumn = getProblemLineColumn(diagnostic, problemId, diagnosticPosition);
 		return new JavacProblem(
 				diagnostic.getSource().getName().toCharArray(),
 				problemMessage,
@@ -191,8 +192,8 @@ public class JavacDiagnosticProblemConverter {
 				severity,
 				diagnosticPosition.getOffset(),
 				diagnosticPosition.getOffset() + Math.max(diagnosticPosition.getLength() - 1, 0),
-				(int) diagnostic.getLineNumber(),
-				(int) diagnostic.getColumnNumber());
+				lineAndColumn[0],
+				lineAndColumn[1]);
 	}
 
 	private String getProblemMessage(Diagnostic<? extends JavaFileObject> diagnostic, int problemId, String[] arguments, String expectedEqualsFieldName) {
@@ -464,7 +465,7 @@ public class JavacDiagnosticProblemConverter {
 			if (problemId == IProblem.UninitializedBlankFinalField && expectedEqualsRange != null) {
 				return new org.eclipse.jface.text.Position(expectedEqualsRange.start(), expectedEqualsRange.length());
 			}
-			if (problemId == IProblem.UninitializedBlankFinalField || problemId == IProblem.UninitializedLocalVariable) {
+			if (problemId == IProblem.UninitializedLocalVariable) {
 				var varSymbol = getDiagnosticArgumentByType(diagnostic, VarSymbol.class);
 				if (varSymbol != null) {
 					return new org.eclipse.jface.text.Position(varSymbol.pos, varSymbol.getSimpleName().length());
@@ -556,6 +557,9 @@ public class JavacDiagnosticProblemConverter {
 						&& (diagnosticPath.getParentPath().getLeaf() instanceof JCNewClass
 							|| (!(diagnosticPath.getLeaf() instanceof JCNewClass) && diagnosticPath.getParentPath().getLeaf() instanceof JCVariableDecl /* case of enum components */))) {
 					return getPositionByNodeRangeOnly(jcDiagnostic, (JCTree)diagnosticPath.getParentPath().getLeaf());
+				} else if (problemId == IProblem.UninitializedBlankFinalField) {
+					org.eclipse.jface.text.Position constructorPosition = getConstructorDiagnosticPosition(diagnosticPath);
+					if (constructorPosition != null) return constructorPosition;
 				}
 			}
 
@@ -870,6 +874,49 @@ public class JavacDiagnosticProblemConverter {
 			}
 		}
 		return getDefaultPosition(jcDiagnostic);
+	}
+
+	private org.eclipse.jface.text.Position getConstructorDiagnosticPosition(TreePath path) {
+		while (path != null && !(path.getLeaf() instanceof JCMethodDecl)) {
+			path = path.getParentPath();
+		}
+		if (path == null || !(path.getLeaf() instanceof JCMethodDecl methodDecl)) {
+			return null;
+		}
+		if ((methodDecl.sym != null
+				? methodDecl.sym.isConstructor()
+				: methodDecl.getReturnType() == null && "<init>".contentEquals(methodDecl.getName()))
+			&& methodDecl.getBody() != null) {
+			int start = methodDecl.getPreferredPosition();
+			int end = methodDecl.getBody().getStartPosition();
+			return start != Position.NOPOS && end != Position.NOPOS && end > start
+					? new org.eclipse.jface.text.Position(start, end - start)
+					: null;
+		}
+		return null;
+	}
+
+	private int[] getProblemLineColumn(Diagnostic<? extends JavaFileObject> diagnostic, int problemId, org.eclipse.jface.text.Position diagnosticPosition) {
+		int line = (int) diagnostic.getLineNumber();
+		int column = (int) diagnostic.getColumnNumber();
+		if (problemId == IProblem.UninitializedBlankFinalField
+				&& "compiler.err.var.might.not.have.been.initialized".equals(diagnostic.getCode())) {
+			int[] remapped = getProblemLineColumnFromOffset(diagnostic, diagnosticPosition.getOffset());
+			if (remapped != null) return remapped;
+		}
+		return new int[] { line, column };
+	}
+
+	private int[] getProblemLineColumnFromOffset(Diagnostic<? extends JavaFileObject> diagnostic, int offset) {
+		if (diagnostic instanceof JCDiagnostic jcDiagnostic) {
+			DiagnosticSource source = jcDiagnostic.getDiagnosticSource();
+			if (source != null) {
+				int line = source.getLineNumber(offset);
+				int column = source.getColumnNumber(offset, true);
+				return line > 0 && column > 0 ? new int[] { line, column } : null;
+			}
+		}
+		return null;
 	}
 
 	private org.eclipse.jface.text.Position getDiagnosticPosition(String name, int startPosition, JCDiagnostic jcDiagnostic)
@@ -1724,10 +1771,15 @@ public class JavacDiagnosticProblemConverter {
 	}
 
 	private TreePath getTreePath(Diagnostic<?> diagnostic) {
-		if (diagnostic instanceof JCDiagnostic jcDiagnostic && jcDiagnostic.getDiagnosticPosition() instanceof JCTree tree) {
-			JCCompilationUnit unit = units.get(jcDiagnostic.getSource());
-			if (unit != null) {
-				return JavacTrees.instance(context).getPath(unit, tree);
+		if (diagnostic instanceof JCDiagnostic jcDiagnostic) {
+			JCTree tree = jcDiagnostic.getDiagnosticPosition() instanceof JCTree jcTree
+					? jcTree
+					: jcDiagnostic.getDiagnosticPosition() != null ? jcDiagnostic.getDiagnosticPosition().getTree() : null;
+			if (tree != null) {
+				JCCompilationUnit unit = units.get(jcDiagnostic.getSource());
+				if (unit != null) {
+					return JavacTrees.instance(context).getPath(unit, tree);
+				}
 			}
 		}
 		return null;

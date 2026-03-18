@@ -146,7 +146,7 @@ public class JavacCompiler extends Compiler {
 		mtl.add(new TaskListener() {
 			@Override
 			public void finished(TaskEvent e) {
-				if (e.getSourceFile() != null && fileObjectToCUMap.get(e.getSourceFile()) instanceof JCCompilationUnit u) {
+				if (e.getSourceFile() != null && e.getCompilationUnit() instanceof JCCompilationUnit u) {
 					problemConverter.registerUnit(e.getSourceFile(), u);
 				}
 			}
