@@ -220,16 +220,17 @@ public class JavacUtils {
 			options.put(Option.G_CUSTOM, Boolean.toString(true));
 			options.put(Option.G_NONE, Boolean.toString(true));
 		} else {
-			options.put(Option.G_CUSTOM, Boolean.toString(true));
-			if (generateVars) {
-				options.put("-g:vars", Boolean.toString(true));
-			}
+			List<String> debugKinds = new ArrayList<>();
 			if (generateLines) {
-				options.put("-g:lines", Boolean.toString(true));
+				debugKinds.add("lines");
+			}
+			if (generateVars) {
+				debugKinds.add("vars");
 			}
 			if (generateSource) {
-				options.put("-g:source", Boolean.toString(true));
+				debugKinds.add("source");
 			}
+			options.put("-g", String.join(",", debugKinds));
 		}
 	}
 
