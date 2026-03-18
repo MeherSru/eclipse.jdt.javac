@@ -955,7 +955,8 @@ public class JavacBindingResolver extends BindingResolver {
 				if (ownerClass.type.isParameterized()
 					&& method.getExpression() != null
 					&& resolveExpressionType(method.getExpression()) instanceof JavacTypeBinding exprType) {
-					parentType = exprType.type;
+					com.sun.tools.javac.code.Type declaringClassType = getTypes().asSuper(exprType.type, ownerClass);
+					parentType = declaringClassType != null && isTypeOfType(declaringClassType) ? declaringClassType : ownerClass.type;
 				} else {
 					parentType = ownerClass.type;
 					boolean isStatic = (sym.flags() & Flags.STATIC) != 0;
