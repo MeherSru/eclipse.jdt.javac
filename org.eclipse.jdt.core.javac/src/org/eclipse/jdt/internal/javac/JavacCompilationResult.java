@@ -76,15 +76,17 @@ public class JavacCompilationResult extends CompilationResult {
 		this.isMigrated = true;
 	}
 
-	public void setUnusedImports(List<CategorizedProblem> newUnusedImports) {
-		this.unusedImports = newUnusedImports;
+	public void addUnusedImports(List<CategorizedProblem> problems) {
+		if (this.unusedImports == null) {
+			this.unusedImports = new ArrayList<>();
+		}
+		this.unusedImports.addAll(problems);
 	}
 
 	public void addUnusedMembers(List<CategorizedProblem> problems) {
 		if (this.unusedMembers == null) {
 			this.unusedMembers = new ArrayList<>();
 		}
-
 		this.unusedMembers.addAll(problems);
 	}
 
@@ -109,20 +111,28 @@ public class JavacCompilationResult extends CompilationResult {
 		this.unclosedCloseables.addAll(problems);
 	}
 
-	public void getUnusedTypeParameters(List<CategorizedProblem> problems) {
+	public void addUnusedTypeParameters(List<CategorizedProblem> problems) {
 		if (this.unusedTypeParameters == null) {
 			this.unusedTypeParameters = new ArrayList<>();
 		}
 		this.unusedTypeParameters.addAll(problems);
 	}
 
-	public void setAccessRestrictionProblems(List<CategorizedProblem> problems) {
-		this.accessRestrictionProblems  = problems;
+	public void addAccessRestrictionProblems(List<CategorizedProblem> problems) {
+		if (this.accessRestrictionProblems == null) {
+			this.accessRestrictionProblems = new ArrayList<>();
+		}
+		this.accessRestrictionProblems.addAll(problems);
 	}
 
 	public List<CategorizedProblem> getAdditionalProblems() {
-		if (this.unusedMembers == null && this.unusedImports == null && this.unnecessaryCasts == null
-				&& this.unclosedCloseables == null && this.accessRestrictionProblems == null) {
+		if (this.unusedMembers == null
+				&& this.unusedImports == null
+				&& this.unnecessaryCasts == null
+				&& this.noEffectAssignments == null
+				&& this.unclosedCloseables == null
+				&& this.unusedTypeParameters == null
+				&& this.accessRestrictionProblems == null) {
 			return null;
 		}
 
@@ -136,8 +146,14 @@ public class JavacCompilationResult extends CompilationResult {
 		if (this.unnecessaryCasts != null) {
 			problems.addAll(this.unnecessaryCasts);
 		}
+		if (this.noEffectAssignments != null) {
+			problems.addAll(this.noEffectAssignments);
+		}
 		if (this.unclosedCloseables != null) {
 			problems.addAll(this.unclosedCloseables);
+		}
+		if (this.unusedTypeParameters != null) {
+			problems.addAll(this.unusedTypeParameters);
 		}
 		if (this.accessRestrictionProblems != null) {
 			problems.addAll(this.accessRestrictionProblems);
