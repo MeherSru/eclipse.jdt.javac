@@ -665,6 +665,11 @@ public class JavacDiagnosticProblemConverter {
 					case JCIdent jcIdent: return getPositionByNodeRangeOnly(jcDiagnostic, jcIdent);
 					case JCMethodInvocation methodInvocation: return getPositionByNodeRangeOnly(jcDiagnostic, methodInvocation);
 					case JCFieldAccess jcFieldAccess:
+						if (problemId == IProblem.NonStaticFieldFromStaticInvocation) {
+							int start = jcFieldAccess.getStartPosition();
+							int end = jcFieldAccess.getEndPosition(endPos);
+							return new org.eclipse.jface.text.Position(start, end - start);
+						}
 						if (getDiagnosticArgumentByType(jcDiagnostic, KindName.class) != KindName.PACKAGE && getDiagnosticArgumentByType(jcDiagnostic, Symbol.PackageSymbol.class) == null) {
 							// TODO here, instead of recomputing a position, get the JDT DOM node and call the Name (which has a position)
 							return new org.eclipse.jface.text.Position(jcFieldAccess.getPreferredPosition() + 1, jcFieldAccess.getIdentifier().length());
