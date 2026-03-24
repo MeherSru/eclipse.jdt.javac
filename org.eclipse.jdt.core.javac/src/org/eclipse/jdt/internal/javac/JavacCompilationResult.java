@@ -37,6 +37,7 @@ public class JavacCompilationResult extends CompilationResult {
 	private List<CategorizedProblem> unusedTypeParameters = null;
 	private List<CategorizedProblem> accessRestrictionProblems = null;
 	private List<CategorizedProblem> indirectStaticAccessProblems = null;
+	private List<CategorizedProblem> unqualifiedFieldAccessProblems = null;
 
 	public JavacCompilationResult(ICompilationUnit compilationUnit) {
 		this(compilationUnit, 0, 0, Integer.MAX_VALUE);
@@ -133,6 +134,13 @@ public class JavacCompilationResult extends CompilationResult {
 		this.indirectStaticAccessProblems.addAll(problems);
 	}
 
+	public void addUnqualifiedFieldAccessProblems(List<CategorizedProblem> problems) {
+		if (this.unqualifiedFieldAccessProblems == null) {
+			this.unqualifiedFieldAccessProblems = new ArrayList<>();
+		}
+		this.unqualifiedFieldAccessProblems.addAll(problems);
+	}
+
 	public List<CategorizedProblem> getAdditionalProblems() {
 		if (this.unusedMembers == null
 				&& this.unusedImports == null
@@ -141,7 +149,8 @@ public class JavacCompilationResult extends CompilationResult {
 				&& this.unclosedCloseables == null
 				&& this.unusedTypeParameters == null
 				&& this.accessRestrictionProblems == null
-				&& this.indirectStaticAccessProblems == null) {
+				&& this.indirectStaticAccessProblems == null
+				&& this.unqualifiedFieldAccessProblems == null) {
 			return null;
 		}
 
@@ -169,6 +178,9 @@ public class JavacCompilationResult extends CompilationResult {
 		}
 		if (this.indirectStaticAccessProblems != null) {
 			problems.addAll(this.indirectStaticAccessProblems);
+		}
+		if (this.unqualifiedFieldAccessProblems != null) {
+			problems.addAll(this.unqualifiedFieldAccessProblems);
 		}
 		return problems;
 	}

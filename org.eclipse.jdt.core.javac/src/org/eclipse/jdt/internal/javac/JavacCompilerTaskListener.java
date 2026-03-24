@@ -282,8 +282,30 @@ public class JavacCompilerTaskListener implements TaskListener {
 
 			final var accessRestrictionScanner = new AccessRestrictionTreeScanner(javacCompiler.lookupEnvironment.nameEnvironment, this.problemFactory, this.javacCompiler.options);
 			accessRestrictionScanner.scan(unit, null);
-			final var indirectStaticAccessScanner = new IndirectStaticAccessTreeScanner(this.context, this.problemFactory, this.javacCompiler.options);
-			indirectStaticAccessScanner.scan(unit, null);
+			final var codeStyleScanner = new CodeStyleTreeScanner(this.context, this.problemFactory, this.javacCompiler.options) {
+				@Override
+				public Void visitClass(ClassTree node, Void p) {
+					if (node instanceof JCClassDecl classDecl) {
+						/**
+						 * If a Java file contains multiple top-level types, it will
+						 * trigger multiple ANALYZE taskEvents for the same compilation
+						 * unit. Each ANALYZE taskEvent corresponds to the completion
+						 * of analysis for a single top-level type. Therefore, in the
+						 * ANALYZE task event listener, we only visit the class and nested
+						 * classes that belong to the currently analyzed top-level type.
+						 */
+						if (Objects.equals(currentTopLevelType, classDecl.sym)
+								|| !(classDecl.sym.owner instanceof PackageSymbol)) {
+							return super.visitClass(node, p);
+						} else {
+							return null; // Skip if it does not belong to the currently analyzed top-level type.
+						}
+					}
+
+					return super.visitClass(node, p);
+				}
+			};
+			codeStyleScanner.scan(unit, null);
 
 			result.addUnusedMembers(scanner.getUnusedPrivateMembers(this.unusedProblemFactory));
 			result.addUnusedImports(scanner.getUnusedImports(this.unusedProblemFactory));
@@ -292,7 +314,8 @@ public class JavacCompilerTaskListener implements TaskListener {
 			result.addUnclosedCloseables(scanner.getUnclosedCloseables(this.unusedProblemFactory));
 			result.addUnusedTypeParameters(scanner.getUnusedTypeParameters(this.unusedProblemFactory));
 			result.addAccessRestrictionProblems(accessRestrictionScanner.getAccessRestrictionProblems());
-			result.addIndirectStaticAccessProblems(indirectStaticAccessScanner.getIndirectStaticAccessProblems());
+			result.addIndirectStaticAccessProblems(codeStyleScanner.getIndirectStaticAccessProblems());
+			result.addUnqualifiedFieldAccessProblems(codeStyleScanner.getUnqualifiedFieldAccessProblems());
 		}
 	}
 

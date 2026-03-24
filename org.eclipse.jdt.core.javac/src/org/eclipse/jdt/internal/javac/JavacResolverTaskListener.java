@@ -150,6 +150,8 @@ public class JavacResolverTaskListener implements TaskListener {
 					.getSeverityString(CompilerOptions.UnusedTypeParameter).equals(CompilerOptions.IGNORE);
 		boolean indirectStaticAccessIgnored = objectCompilerOptions
 					.getSeverityString(CompilerOptions.IndirectStaticAccess).equals(CompilerOptions.IGNORE);
+		boolean unqualifiedFieldAccessIgnored = objectCompilerOptions
+					.getSeverityString(CompilerOptions.UnqualifiedFieldAccess).equals(CompilerOptions.IGNORE);
 		if (!Options.instance(context).get(Option.XLINT_CUSTOM).contains("all")
 			    && unusedImportIgnored
 			    && unusedPrivateMemberIgnored
@@ -158,19 +160,20 @@ public class JavacResolverTaskListener implements TaskListener {
 				&& noEffectAssignmentIgnored
 				&& unclosedCloseableIgnored
 				&& unusedTypeParameterIgnored
-				&& indirectStaticAccessIgnored) {
+				&& indirectStaticAccessIgnored
+				&& unqualifiedFieldAccessIgnored) {
 			return;
 		}
 
 		// Add all problems related to unused elements to the dom
 		List<IProblem> allUnused = getUnusedElementProblems(e, dom);
 		List<IProblem> accessRestrictions = getAccessRestrictionProblems(e, dom);
-		List<IProblem> indirectStaticAccessProblems = getIndirectStaticAccessProblems(e);
+		List<IProblem> codeStyles = getCodeStyleProblems(e);
 
 		List<IProblem> combined = new ArrayList<IProblem>();
 		combined.addAll(allUnused);
 		combined.addAll(accessRestrictions);
-		combined.addAll(indirectStaticAccessProblems);
+		combined.addAll(codeStyles);
 		addProblemsToDOM(dom,combined);
 
 	}
@@ -194,11 +197,45 @@ public class JavacResolverTaskListener implements TaskListener {
 		return new ArrayList<>();
 	}
 
-	private List<IProblem> getIndirectStaticAccessProblems(TaskEvent e) {
-		IndirectStaticAccessTreeScanner scanner = new IndirectStaticAccessTreeScanner(this.context,
-				new DefaultProblemFactory(), new CompilerOptions(compilerOptions));
-		scanner.scan(e.getCompilationUnit(), null);
-		return new ArrayList<>(scanner.getIndirectStaticAccessProblems());
+	private List<IProblem> getCodeStyleProblems(TaskEvent e) {
+		final TypeElement currentTopLevelType = e.getTypeElement();
+		CodeStyleTreeScanner scanner = new CodeStyleTreeScanner(this.context,
+				new DefaultProblemFactory(), new CompilerOptions(compilerOptions)) {
+			@Override
+			public Void visitClass(ClassTree node, Void p) {
+				if (node instanceof JCClassDecl classDecl) {
+					/**
+					 * If a Java file contains multiple top-level types, it will trigger multiple
+					 * ANALYZE taskEvents for the same compilation unit. Each ANALYZE taskEvent
+					 * corresponds to the completion of analysis for a single top-level type.
+					 * Therefore, in the ANALYZE task event listener, we only visit the class and
+					 * nested classes that belong to the currently analyzed top-level type.
+					 */
+					if (Objects.equals(currentTopLevelType, classDecl.sym)
+							|| !(classDecl.sym.owner instanceof PackageSymbol)) {
+						return super.visitClass(node, p);
+					} else {
+						return null; // Skip if it does not belong to the currently analyzed top-level type.
+					}
+				}
+
+				return super.visitClass(node, p);
+			}
+		};
+		final CompilationUnitTree unit = e.getCompilationUnit();
+		scanner.scan(unit, null);
+		List<IProblem> allCodeStyleProblems = new ArrayList<>();
+
+		List<CategorizedProblem> indirectStaticAccesses = scanner.getIndirectStaticAccessProblems();
+		if (!indirectStaticAccesses.isEmpty()) {
+			allCodeStyleProblems.addAll(indirectStaticAccesses);
+		}
+
+		List<CategorizedProblem> unqualifiedFieldAccesses = scanner.getUnqualifiedFieldAccessProblems();
+		if (!unqualifiedFieldAccesses.isEmpty()) {
+			allCodeStyleProblems.addAll(unqualifiedFieldAccesses);
+		}
+		return allCodeStyleProblems;
 	}
 
 	private List<IProblem> getUnusedElementProblems(TaskEvent e, final CompilationUnit dom) {
