@@ -4,6 +4,7 @@ import org.eclipse.jdt.core.compiler.IProblem;
 import org.eclipse.jdt.core.dom.IMethodBinding;
 import org.eclipse.jdt.core.dom.ITypeBinding;
 import org.eclipse.jdt.core.dom.MethodDeclaration;
+import org.eclipse.jdt.core.dom.SwitchStatement;
 import org.eclipse.jdt.core.dom.Type;
 import org.eclipse.jdt.core.dom.VariableDeclarationFragment;
 import org.eclipse.jdt.internal.compiler.IErrorHandlingPolicy;
@@ -159,6 +160,24 @@ public class JavacProblemReporter extends ProblemHandler {
 				buffer.append(new String(makeShort ? type.getName() : type.getQualifiedName()));
 		}
 		return buffer.toString();
+	}
+
+	public void missingEnumConstantsInSwitch(SwitchStatement statement, String[] missingConstants) {
+	    int severity = this.severityUtility.computeSeverity(IProblem.MissingEnumConstantCase);
+	    if (severity == ProblemSeverities.Ignore) {
+	        return;
+	    }
+
+	    int sourceStart = statement.getExpression().getStartPosition();
+	    int sourceEnd = statement.getExpression().getStartPosition() + statement.getExpression().getLength() - 1;
+
+	    this.handle(
+	            IProblem.MissingEnumConstantCase,
+	            missingConstants,
+	            missingConstants,
+	            severity,
+	            sourceStart,
+	            sourceEnd);
 	}
 
 

@@ -1,25 +1,33 @@
 package org.eclipse.jdt.internal.javac.problem;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 import org.eclipse.jdt.core.compiler.IProblem;
 import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.ASTVisitor;
 import org.eclipse.jdt.core.dom.ClassInstanceCreation;
 import org.eclipse.jdt.core.dom.CompilationUnit;
+import org.eclipse.jdt.core.dom.Expression;
 import org.eclipse.jdt.core.dom.IBinding;
 import org.eclipse.jdt.core.dom.IMethodBinding;
 import org.eclipse.jdt.core.dom.ITypeBinding;
+import org.eclipse.jdt.core.dom.IVariableBinding;
 import org.eclipse.jdt.core.dom.JavacBindingResolver;
 import org.eclipse.jdt.core.dom.JdtCoreDomPackagePrivateUtility;
 import org.eclipse.jdt.core.dom.MarkerAnnotation;
 import org.eclipse.jdt.core.dom.MethodDeclaration;
+import org.eclipse.jdt.core.dom.Name;
 import org.eclipse.jdt.core.dom.ParameterizedType;
 import org.eclipse.jdt.core.dom.SimpleName;
+import org.eclipse.jdt.core.dom.SwitchCase;
+import org.eclipse.jdt.core.dom.SwitchStatement;
 import org.eclipse.jdt.core.dom.Type;
 import org.eclipse.jdt.core.dom.VariableDeclarationFragment;
 import org.eclipse.jdt.core.dom.VariableDeclarationStatement;
@@ -182,5 +190,56 @@ public class JavacProblemDiscovery extends ASTVisitor {
 			}
 		}
 		return false;
+	}
+
+	@Override
+	public boolean visit(SwitchStatement node) {
+	    if (node.getExpression() == null) {
+	        return true;
+	    }
+
+	    ITypeBinding typeBinding = node.getExpression().resolveTypeBinding();
+	    if (typeBinding == null || !typeBinding.isEnum()) {
+	        return true;
+	    }
+
+	    List<String> enumConstantList = new ArrayList<>();
+	    for (IVariableBinding field : typeBinding.getDeclaredFields()) {
+	        if (field.isEnumConstant()) {
+	            enumConstantList.add(field.getName());
+	        }
+	    }
+
+	    Set<String> enumConstants = new LinkedHashSet<>(enumConstantList);
+
+	    Set<String> handledConstants = new LinkedHashSet<>();
+	    boolean hasDefault = false;
+
+	    for (Object stmtObj : node.statements()) {
+	        if (stmtObj instanceof SwitchCase sc) {
+	            Expression expr = sc.getExpression();
+
+	            if (expr == null) {
+	                hasDefault = true;
+	                continue;
+	            }
+
+	            if (expr instanceof Name name) {
+	                IBinding b = name.resolveBinding();
+	                if (b instanceof IVariableBinding vb && vb.isEnumConstant()) {
+	                    handledConstants.add(vb.getName());
+	                }
+	            }
+	        }
+	    }
+
+	    Set<String> missing = new LinkedHashSet<>(enumConstants);
+	    missing.removeAll(handledConstants);
+
+	    if (!missing.isEmpty() && !hasDefault) {
+	        reporter.missingEnumConstantsInSwitch(node, missing.toArray(new String[0]));
+	    }
+
+	    return true;
 	}
 }
