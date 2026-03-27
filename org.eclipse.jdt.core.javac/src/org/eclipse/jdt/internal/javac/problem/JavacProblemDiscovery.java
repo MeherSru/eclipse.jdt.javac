@@ -1,6 +1,5 @@
 package org.eclipse.jdt.internal.javac.problem;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -203,31 +202,32 @@ public class JavacProblemDiscovery extends ASTVisitor {
 	        return true;
 	    }
 
-	    List<String> enumConstantList = new ArrayList<>();
+	    Set<String> enumConstants = new LinkedHashSet<>();
 	    for (IVariableBinding field : typeBinding.getDeclaredFields()) {
 	        if (field.isEnumConstant()) {
-	            enumConstantList.add(field.getName());
+	            enumConstants.add(field.getName());
 	        }
 	    }
-
-	    Set<String> enumConstants = new LinkedHashSet<>(enumConstantList);
 
 	    Set<String> handledConstants = new LinkedHashSet<>();
 	    boolean hasDefault = false;
 
 	    for (Object stmtObj : node.statements()) {
 	        if (stmtObj instanceof SwitchCase sc) {
-	            Expression expr = sc.getExpression();
-
-	            if (expr == null) {
+	            if (sc.isDefault()) {
 	                hasDefault = true;
 	                continue;
 	            }
 
-	            if (expr instanceof Name name) {
-	                IBinding b = name.resolveBinding();
-	                if (b instanceof IVariableBinding vb && vb.isEnumConstant()) {
-	                    handledConstants.add(vb.getName());
+	            @SuppressWarnings("unchecked")
+	            List<Expression> expressions = sc.expressions();
+
+	            for (Expression caseExpr : expressions) {
+	                if (caseExpr instanceof Name name) {
+	                    IBinding b = name.resolveBinding();
+	                    if (b instanceof IVariableBinding vb && vb.isEnumConstant()) {
+	                        handledConstants.add(vb.getName());
+	                    }
 	                }
 	            }
 	        }
