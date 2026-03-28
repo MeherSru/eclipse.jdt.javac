@@ -555,10 +555,6 @@ public class JavacUtils {
 	}
 
 	public static int[] findMatch(String content, String text, int searchStart, int searchEnd) {
-		int directMatch = content.indexOf(text, searchStart, searchEnd);
-		if (directMatch >= 0) {
-			return new int[] { directMatch, text.length() };
-		}
 		for (int offset = searchStart; offset < searchEnd; offset++) {
 			int cursor = offset;
 			boolean matches = true;
