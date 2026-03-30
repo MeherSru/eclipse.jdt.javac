@@ -35,6 +35,7 @@ import org.eclipse.core.runtime.ILog;
 import org.eclipse.jdt.core.IJavaProject;
 import org.eclipse.jdt.core.Signature;
 import org.eclipse.jdt.core.WorkingCopyOwner;
+import org.eclipse.jdt.internal.javac.ContextExecutor;
 import org.eclipse.jdt.internal.javac.dom.JavacAnnotationBinding;
 import org.eclipse.jdt.internal.javac.dom.JavacErrorMethodBinding;
 import org.eclipse.jdt.internal.javac.dom.JavacErrorTypeBinding;
@@ -1020,7 +1021,8 @@ public class JavacBindingResolver extends BindingResolver {
 
 
 	private com.sun.tools.javac.code.Type findSiteTypeToUse(JCMethodInvocation jcmi, JCTree siteType) {
-		com.sun.tools.javac.code.Type siteTypeToUse = Types.instance(context)
+		Types types1 = ContextExecutor.runContextTask(() -> Types.instance(context), context);
+		com.sun.tools.javac.code.Type siteTypeToUse = types1
 			    .asSuper(
 			        siteType.type,
 			        jcmi.meth instanceof JCIdent id ? id.sym.owner :
