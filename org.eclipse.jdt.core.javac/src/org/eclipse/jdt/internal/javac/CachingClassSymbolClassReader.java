@@ -89,7 +89,7 @@ public class CachingClassSymbolClassReader extends ClassReader {
 
 		protected StoringQueriesAnnotate(Context context) {
 			super(context);
-			this.reader = (CachingClassSymbolClassReader)ClassReader.instance(context);
+			this.reader = (CachingClassSymbolClassReader) ContextExecutor.runContextTask(() -> ClassReader.instance(context), context);
 		}
 
 		@Override
@@ -145,10 +145,12 @@ public class CachingClassSymbolClassReader extends ClassReader {
 
 	protected CachingClassSymbolClassReader(Context context) {
 		super(context);
-		this.localTypes = Types.instance(context);
-		this.localNames = Names.instance(context);
-		this.localSyms = Symtab.instance(context);
-		this.localAnnotate = (StoringQueriesAnnotate)Annotate.instance(context);
+		this.localTypes = ContextExecutor.runContextTask(() -> Types.instance(context), context);
+		this.localNames = ContextExecutor.runContextTask(() -> Names.instance(context), context);
+		this.localSyms = ContextExecutor.runContextTask(() -> Symtab.instance(context), context);
+		this.localAnnotate = ContextExecutor.runContextTask(
+			    () -> (StoringQueriesAnnotate) Annotate.instance(context),
+			    context);
 		//
 		try {
 			Field utf8ValidationField = ClassReader.class.getDeclaredField("utf8validation");

@@ -44,6 +44,7 @@ import org.eclipse.jdt.internal.compiler.impl.CompilerOptions;
 import org.eclipse.jdt.internal.compiler.problem.DefaultProblemFactory;
 import org.eclipse.jdt.internal.compiler.problem.ProblemReporter;
 import org.eclipse.jdt.internal.compiler.problem.ProblemSeverities;
+import org.eclipse.jdt.internal.javac.ContextExecutor;
 
 import com.sun.source.tree.AnnotationTree;
 import com.sun.source.tree.Tree;
@@ -503,7 +504,9 @@ public class JavacDiagnosticProblemConverter {
 				} else if (problemId == IProblem.SealedSuperClassDoesNotPermit) {
 					// jdt expects the node in the extends clause with the name of the sealed class
 					if (diagnosticPath.getLeaf() instanceof JCTree.JCClassDecl classDecl) {
-						diagnosticPath = JavacTrees.instance(context).getPath(units.get(jcDiagnostic.getSource()), classDecl.getExtendsClause());
+						diagnosticPath = ContextExecutor.runContextTask(
+								() -> JavacTrees.instance(context).getPath(units.get(jcDiagnostic.getSource()), classDecl.getExtendsClause()),
+								context);
 					}
 				} else if (problemId == IProblem.SealedSuperInterfaceDoesNotPermit) {
 					// jdt expects the node in the implements clause with the name of the sealed class
@@ -515,7 +518,9 @@ public class JavacDiagnosticProblemConverter {
 								}) //
 								.findFirst();
 						if (jcExpr.isPresent()) {
-							diagnosticPath = JavacTrees.instance(context).getPath(units.get(jcDiagnostic.getSource()), jcExpr.get());
+							diagnosticPath = ContextExecutor.runContextTask(
+									() -> JavacTrees.instance(context).getPath(units.get(jcDiagnostic.getSource()), jcExpr.get()),
+									context);
 						}
 					}
 				} else if (problemId == IProblem.TypeMismatch && diagnosticPath.getLeaf() instanceof JCFieldAccess fieldAccess) {
@@ -761,7 +766,7 @@ public class JavacDiagnosticProblemConverter {
 			JavaFileObject fileObject = source.getFile();
 			CharSequence charContent = fileObject.getCharContent(true);
 			Context scanContext = new Context();
-			ScannerFactory scannerFactory = ScannerFactory.instance(scanContext);
+			ScannerFactory scannerFactory = ContextExecutor.runContextTask(() -> ScannerFactory.instance(context), context);
 			Log log = Log.instance(scanContext);
 			log.useSource(fileObject);
 			Scanner javacScanner = scannerFactory.newScanner(charContent, true);
@@ -797,7 +802,7 @@ public class JavacDiagnosticProblemConverter {
 					DiagnosticSource source = jcDiagnostic.getDiagnosticSource();
 					JavaFileObject fileObject = source.getFile();
 					CharSequence charContent = fileObject.getCharContent(true);
-					ScannerFactory scannerFactory = ScannerFactory.instance(context);
+					ScannerFactory scannerFactory = ContextExecutor.runContextTask(() -> ScannerFactory.instance(context), context);
 					Scanner javacScanner = scannerFactory.newScanner(charContent, true);
 					Token t = javacScanner.token();
 					Token lparen = null;
@@ -1780,7 +1785,7 @@ public class JavacDiagnosticProblemConverter {
 			JCCompilationUnit unit = units.get(jcDiagnostic.getSource());
 			if (unit != null) {
 				// is the error in a method argument?
-				TreePath path = JavacTrees.instance(context).getPath(unit, tree);
+				TreePath path = ContextExecutor.runContextTask(() -> JavacTrees.instance(context).getPath(unit, tree), context);
 				if (path != null) {
 					path = path.getParentPath();
 				}
@@ -1806,7 +1811,7 @@ public class JavacDiagnosticProblemConverter {
 			if (tree != null) {
 				JCCompilationUnit unit = units.get(jcDiagnostic.getSource());
 				if (unit != null) {
-					return JavacTrees.instance(context).getPath(unit, tree);
+					return ContextExecutor.runContextTask(() -> JavacTrees.instance(context).getPath(unit, tree), context);
 				}
 			}
 		}

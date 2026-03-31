@@ -345,7 +345,7 @@ public class JavacResolverTaskListener implements TaskListener {
 			this.u = u;
 			this.focus = focalPoint;
 			this.context = context;
-			this.treeMaker = TreeMaker.instance(context);
+			this.treeMaker = ContextExecutor.runContextTask(() -> TreeMaker.instance(context), context);
 		}
 		@Override
 		public void visitMethodDef(JCMethodDecl decl) {
@@ -353,10 +353,13 @@ public class JavacResolverTaskListener implements TaskListener {
 				!decl.getBody().getStatements().isEmpty() &&
 				!(decl.getStartPosition() <= focus &&
 				decl.getStartPosition() + TreeInfo.getEndPos(decl, u.endPositions) >= focus)) {
+				var runtimeExceptionName = ContextExecutor.runContextTask(
+						() -> Names.instance(context).fromString(RuntimeException.class.getSimpleName()),
+						context);
 				var throwNewRuntimeExceptionOutOfFocalPositionScope =
 					treeMaker.Throw(
 							treeMaker.NewClass(null, null,
-									treeMaker.Ident(Names.instance(context).fromString(RuntimeException.class.getSimpleName())),
+									treeMaker.Ident(runtimeExceptionName),
 									com.sun.tools.javac.util.List.of(treeMaker.Literal("Out of focalPosition scope")), null)); //$NON-NLS-1$
 				decl.body.stats = com.sun.tools.javac.util.List.of(throwNewRuntimeExceptionOutOfFocalPositionScope);
 			}

@@ -55,7 +55,7 @@ public class CachingJDKPlatformArguments extends Arguments {
 
 	private CachingJDKPlatformArguments(Context context) {
 		super(context);
-		this.options = Options.instance(context);
+		this.options = ContextExecutor.runContextTask(() -> Options.instance(context), context);
 		this.context = context;
 	}
 

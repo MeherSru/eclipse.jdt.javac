@@ -2036,9 +2036,9 @@ public class JavacBindingResolver extends BindingResolver {
 		default -> null;
 		};
 		if (type == null && !wellKnownOnly) {
-			ClassFinder finder = ClassFinder.instance(context);
-			Modules modules = Modules.instance(context);
-			Names names = Names.instance(context);
+			ClassFinder finder = ContextExecutor.runContextTask(() -> ClassFinder.instance(context), context);
+			Modules modules = ContextExecutor.runContextTask(() -> Modules.instance(context), context);
+			Names names = ContextExecutor.runContextTask(() -> Names.instance(context), context);
 			if (finder != null && modules != null && names != null) {
 				try {
 					ClassSymbol sym = finder.loadClass(modules.getDefaultModule(), names.fromString(typeName));

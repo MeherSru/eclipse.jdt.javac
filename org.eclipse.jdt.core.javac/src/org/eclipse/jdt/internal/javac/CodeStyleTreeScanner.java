@@ -55,7 +55,7 @@ public class CodeStyleTreeScanner extends TreeScanner<Void, Void> {
 	CodeStyleTreeScanner(Context context, IProblemFactory problemFactory, CompilerOptions compilerOptions) {
 		this.problemFactory = problemFactory;
 		this.compilerOptions = compilerOptions;
-		this.types = Types.instance(context);
+		this.types = ContextExecutor.runContextTask(() -> Types.instance(context), context);
 	}
 
 	@Override

@@ -110,7 +110,7 @@ public class JavacUtils {
 
 	private static void configureOptions(IJavaProject javaProject, Context context, Map<String, String> compilerOptions, String addExports, String limitModules) {
 		boolean nineOrLater = false;
-		Options options = Options.instance(context);
+		Options options = ContextExecutor.runContextTask(() -> Options.instance(context), context);
 		options.put("should-stop.ifError", CompileState.GENERATE.toString());
 		options.put(Option.IMPLICIT, "none");
 		final Version complianceVersion;

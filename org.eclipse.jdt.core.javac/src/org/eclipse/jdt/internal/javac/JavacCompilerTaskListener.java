@@ -139,7 +139,11 @@ public class JavacCompilerTaskListener implements TaskListener {
 			boolean getNoEffectAssignments = this.javacCompiler.options.getSeverity(CompilerOptions.NoEffectAssignment) != ProblemSeverities.Ignore;
 			boolean getUnclosedCloseables = this.javacCompiler.options.getSeverity(CompilerOptions.UnclosedCloseable) != ProblemSeverities.Ignore;
 			boolean getUnusedTypeParameters = this.javacCompiler.options.getSeverity(CompilerOptions.UnusedTypeParameter) != ProblemSeverities.Ignore;
-			boolean getAccessRestrictions = Options.instance(context).get(Option.XLINT_CUSTOM).contains("all");
+			var accessRestrictions = ContextExecutor.runContextTask(
+				    () -> Options.instance(context).get(Option.XLINT_CUSTOM),
+				    context);
+
+				boolean getAccessRestrictions = accessRestrictions.contains("all");
 			boolean getIndirectStaticAccessProblems = this.javacCompiler.options.getSeverity(CompilerOptions.IndirectStaticAccess) != ProblemSeverities.Ignore;
 			boolean getUnqualifiedFieldAccessProblems = this.javacCompiler.options.getSeverity(CompilerOptions.UnqualifiedFieldAccess) != ProblemSeverities.Ignore;
 

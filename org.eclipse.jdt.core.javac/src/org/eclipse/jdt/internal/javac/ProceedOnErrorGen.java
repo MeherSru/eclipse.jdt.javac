@@ -61,9 +61,15 @@ public class ProceedOnErrorGen extends Gen {
 	}
 
 	private JCNewClass newRuntimeException() {
-		var treeMaker = TreeMaker.instance(context);
-		var res = treeMaker.NewClass(null, null, treeMaker.Ident(Names.instance(context).fromString(RuntimeException.class.getSimpleName())), List.of(treeMaker.Literal("Compile Error")), null);
+		var treeMaker = ContextExecutor.runContextTask(() -> TreeMaker.instance(context), context);
+		var runtimeExceptionName = ContextExecutor.runContextTask(
+				() -> Names.instance(context).fromString(RuntimeException.class.getSimpleName()),
+				context);
+		var res = treeMaker.NewClass(null, null, treeMaker.Ident(runtimeExceptionName), List.of(treeMaker.Literal("Compile Error")), null);
+		ContextExecutor.runContextTask(() -> {
 		Attr.instance(context).attribStat(res, getAttrEnv());
+		return null;
+		}, context);
 		res.type = res.clazz.type; // ugly workaround
 		return res;
 	}
