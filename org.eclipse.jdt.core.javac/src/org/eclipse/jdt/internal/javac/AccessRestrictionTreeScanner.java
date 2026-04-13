@@ -19,6 +19,8 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
+import javax.lang.model.element.TypeElement;
+
 import org.eclipse.jdt.core.compiler.CategorizedProblem;
 import org.eclipse.jdt.core.compiler.IProblem;
 import org.eclipse.jdt.internal.compiler.IProblemFactory;
@@ -26,8 +28,6 @@ import org.eclipse.jdt.internal.compiler.env.AccessRestriction;
 import org.eclipse.jdt.internal.compiler.env.INameEnvironment;
 import org.eclipse.jdt.internal.compiler.env.NameEnvironmentAnswer;
 import org.eclipse.jdt.internal.compiler.impl.CompilerOptions;
-import org.eclipse.jdt.internal.compiler.problem.ProblemReporter;
-import org.eclipse.jdt.internal.compiler.problem.ProblemSeverities;
 
 import com.sun.source.doctree.DocTree;
 import com.sun.source.doctree.LinkTree;
@@ -42,7 +42,6 @@ import com.sun.source.tree.MethodTree;
 import com.sun.source.tree.ModifiersTree;
 import com.sun.source.tree.NewClassTree;
 import com.sun.source.tree.Tree;
-import com.sun.source.util.TreeScanner;
 import com.sun.tools.javac.code.Symbol;
 import com.sun.tools.javac.code.Type;
 import com.sun.tools.javac.parser.Tokens.Comment;
@@ -60,7 +59,7 @@ import com.sun.tools.javac.tree.JCTree.JCNewClass;
 /**
  * Collects access restriction-related problems by scanning a parsed javac AST.
  */
-public class AccessRestrictionTreeScanner extends TreeScanner<Void, Void> {
+public class AccessRestrictionTreeScanner extends TopLevelTreeScanner<Void, Void> {
 
 	// copied from ProblemReporter
 	private final static byte TYPE_ACCESS = 0x0, FIELD_ACCESS = 0x4, CONSTRUCTOR_ACCESS = 0x8, METHOD_ACCESS = 0xC;
@@ -88,7 +87,8 @@ public class AccessRestrictionTreeScanner extends TreeScanner<Void, Void> {
 	private int suppressedWarningsCount = 0;
 
 	public AccessRestrictionTreeScanner(INameEnvironment nameEnvironment, IProblemFactory problemFactory,
-			CompilerOptions compilerOptions) {
+			CompilerOptions compilerOptions, TypeElement currentTopLevelType) {
+		super(currentTopLevelType);
 		this.nameEnvironment = nameEnvironment;
 		this.problemFactory = problemFactory;
 		this.compilerOptions = compilerOptions;
@@ -392,7 +392,7 @@ public class AccessRestrictionTreeScanner extends TreeScanner<Void, Void> {
 
 		this.accessRestrictionProblems.add(this.problemFactory.createProblem(unit.getSourceFile().getName().toCharArray(), //
 				IProblem.UnusedWarningToken, //
-				UNNECESSARY_SUPPRESS_ARGS, 0, UNNECESSARY_SUPPRESS_ARGS, toSeverity(IProblem.UnusedWarningToken), //
+				UNNECESSARY_SUPPRESS_ARGS, 0, UNNECESSARY_SUPPRESS_ARGS, JavacUtils.toSeverity(this.compilerOptions, IProblem.UnusedWarningToken), //
 				startPos, endPos, line, column));
 	}
 
@@ -434,7 +434,7 @@ public class AccessRestrictionTreeScanner extends TreeScanner<Void, Void> {
 		int realProblemId = problemId & 0xFFFF;
 
 		String simpleName = getSimpleNameFromFQN(fqn);
-		int severity = toSeverity(problemId);
+		int severity = JavacUtils.toSeverity(this.compilerOptions, problemId);
 
 		int line = unit.getLineMap().getLineNumber(startPos);
 		int column = unit.getLineMap().getColumnNumber(startPos);
@@ -475,16 +475,6 @@ public class AccessRestrictionTreeScanner extends TreeScanner<Void, Void> {
 		return currentUnitName;
 	}
 
-	private int toSeverity(int jdtProblemId) {
-		int irritant = ProblemReporter.getIrritant(jdtProblemId);
-		if (irritant != 0) {
-			int res = this.compilerOptions.getSeverity(irritant);
-			res &= ~ProblemSeverities.Optional; // reject optional flag at this stage
-			return res;
-		}
-
-		return ProblemSeverities.Warning;
-	}
 
 	private static String toDisplayString(Symbol.MethodSymbol sym) {
 		StringBuilder builder = new StringBuilder();
