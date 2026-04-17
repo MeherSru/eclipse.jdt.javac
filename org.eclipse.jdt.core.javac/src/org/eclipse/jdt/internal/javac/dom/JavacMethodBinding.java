@@ -78,6 +78,7 @@ public abstract class JavacMethodBinding implements IMethodBinding {
 	final boolean explicitSynthetic;
 	// allows to discriminate generic vs parameterized
 	private final boolean isDeclaration;
+	private final boolean methodDeclaration;
 	private IMethod javaElement;
 	private String key;
 	private List<Type> resolvedTypeArgs;
@@ -99,6 +100,7 @@ public abstract class JavacMethodBinding implements IMethodBinding {
 		this.parentType = parentType == null && methodSymbol != null && methodSymbol.owner instanceof ClassSymbol classSymbol && JavacBindingResolver.isTypeOfType(classSymbol.type) ?
 				classSymbol.type : parentType;
 		this.isDeclaration = isParameterized(methodSymbol) && isDeclaration;
+		this.methodDeclaration = isDeclaration;
 		this.explicitSynthetic = explicitSynthetic;
 		this.resolver = resolver;
 		this.resolvedTypeArgs = resolvedTypeArgs != null && !resolvedTypeArgs.isEmpty() ? resolvedTypeArgs : null;
@@ -498,7 +500,11 @@ public abstract class JavacMethodBinding implements IMethodBinding {
 	private String computeKey() {
 		try {
 			StringBuilder builder = new StringBuilder();
-			getKey(builder, this.methodSymbol, this.methodType, this.parentType, this.resolver);
+			if (this.methodDeclaration) {
+				getKey(builder, this.methodSymbol, this.methodType, null, true, this.resolver);
+			} else {
+				getKey(builder, this.methodSymbol, this.methodType, this.parentType, this.resolver);
+			}
 			// TODO!!!!
 			// add %< typeParams >
 			if( this.resolvedTypeArgs != null ) {
