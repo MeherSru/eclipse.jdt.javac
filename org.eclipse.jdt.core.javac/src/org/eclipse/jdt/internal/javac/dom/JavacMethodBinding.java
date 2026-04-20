@@ -96,9 +96,14 @@ public abstract class JavacMethodBinding implements IMethodBinding {
 	public JavacMethodBinding(ExecutableType methodType, MethodSymbol methodSymbol, Type parentType, JavacBindingResolver resolver, boolean explicitSynthetic, boolean isDeclaration, List<Type> resolvedTypeArgs) {
 		this.methodType = methodType != null ? methodType : (methodSymbol != null ? JavacBindingResolver.asExecutable(methodSymbol.type) : null);
 		this.methodSymbol = methodSymbol;
-		this.parentType = parentType == null && methodSymbol != null && methodSymbol.owner instanceof ClassSymbol classSymbol && JavacBindingResolver.isTypeOfType(classSymbol.type) ?
-				classSymbol.type : parentType;
-		this.isDeclaration = isParameterized(methodSymbol) && isDeclaration;
+		this.parentType = parentType == null
+				&& !isDeclaration
+				&& methodSymbol != null
+				&& methodSymbol.owner instanceof ClassSymbol classSymbol
+				&& JavacBindingResolver.isTypeOfType(classSymbol.type)
+						? classSymbol.type
+						: parentType;
+		this.isDeclaration = isDeclaration;
 		this.explicitSynthetic = explicitSynthetic;
 		this.resolver = resolver;
 		this.resolvedTypeArgs = resolvedTypeArgs != null && !resolvedTypeArgs.isEmpty() ? resolvedTypeArgs : null;
@@ -498,7 +503,7 @@ public abstract class JavacMethodBinding implements IMethodBinding {
 	private String computeKey() {
 		try {
 			StringBuilder builder = new StringBuilder();
-			getKey(builder, this.methodSymbol, this.methodType, this.parentType, this.resolver);
+			getKey(builder, this.methodSymbol, this.methodType, this.parentType, this.isDeclaration, this.resolver);
 			// TODO!!!!
 			// add %< typeParams >
 			if( this.resolvedTypeArgs != null ) {
@@ -521,8 +526,9 @@ public abstract class JavacMethodBinding implements IMethodBinding {
 	static void getKey(StringBuilder builder, MethodSymbol methodSymbol, ExecutableType methodType, Type parentType, boolean useSlashes, JavacBindingResolver resolver) throws BindingKeyException {
 
 		if (parentType != null) {
-		    Type erased = resolver.getTypes().erasure(parentType);
-		    JavacTypeBinding.getKey(builder, erased, false, false, true, resolver);
+			JavacTypeBinding parentBinding = resolver.bindings.getTypeBinding(parentType);
+			String parentKey = parentBinding.getKeyWithPossibleGenerics(parentType, parentType.tsym);
+			builder.append(parentKey);
 		} else {
 			Symbol ownerSymbol = methodSymbol.owner;
 			while (ownerSymbol != null && !(ownerSymbol instanceof TypeSymbol)) {
@@ -654,10 +660,20 @@ public abstract class JavacMethodBinding implements IMethodBinding {
 	@Override
 	public ITypeBinding getDeclaringClass() {
 		if (this.parentType != null) {
-			return this.resolver.bindings.getTypeBinding(this.parentType, null, this.methodSymbol,  isDeclaration);
+			Type declaringType = this.isDeclaration
+					? this.resolver.getTypes().erasure(this.parentType)
+					: this.parentType;
+			return this.isDeclaration
+					? this.resolver.bindings.getTypeBinding(declaringType)
+					: this.resolver.bindings.getTypeBinding(declaringType, null, this.methodSymbol, this.isDeclaration);
 		}
 		if (this.methodSymbol != null && this.methodSymbol.owner instanceof ClassSymbol clazz) {
-			return this.resolver.bindings.getTypeBinding(clazz.type, null, this.methodSymbol, isDeclaration);
+			Type declaringType = this.isDeclaration
+					? this.resolver.getTypes().erasure(clazz.type)
+					: clazz.type;
+			return this.isDeclaration
+					? this.resolver.bindings.getTypeBinding(declaringType)
+					: this.resolver.bindings.getTypeBinding(declaringType, null, this.methodSymbol, this.isDeclaration);
 		}
 		return null;
 	}
