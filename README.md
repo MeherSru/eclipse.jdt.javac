@@ -50,31 +50,26 @@ https://github.com/eclipse-jdtls/eclipse.jdt.javac/blob/main/org.eclipse.jdt.cor
 
 #### Local Development Builds
 
-This project depends on test bundles from forked Eclipse repositories that are not published to public P2 repositories:
-- `org.eclipse.jdt.core.tests.compiler` and `org.eclipse.jdt.core.tests.model` from [eclipse-jdtls/eclipse-jdt-core-incubator](https://github.com/eclipse-jdtls/eclipse-jdt-core-incubator)
-- `org.eclipse.jdt.ui.tests` from [eclipse-jdt/eclipse.jdt.ui](https://github.com/eclipse-jdt/eclipse.jdt.ui)
+This project depends on test bundles that are not published to standard Eclipse P2 repositories:
+- `org.eclipse.jdt.core.tests.*` bundles - automatically resolved from [CI build artifacts](https://ci.eclipse.org/ls/job/jdt-core-incubator/job/dom-with-javac/)
+- `org.eclipse.jdt.ui.tests` from [eclipse-jdt/eclipse.jdt.ui](https://github.com/eclipse-jdt/eclipse.jdt.ui) - must be built manually
 
-**To build locally**, you must first build these dependencies and install them to your local Maven repository:
+**To build locally**, you must first build the JDT UI test dependency:
 
 ```bash
-# 1. Build JDT Core test bundles
-git clone https://github.com/eclipse-jdtls/eclipse-jdt-core-incubator.git
-cd eclipse-jdt-core-incubator
-git checkout dom-with-javac
-mvn install -DskipTests \
-    -pl org.eclipse.jdt.core.tests.compiler,org.eclipse.jdt.core.tests.model,org.eclipse.jdt.compiler.apt.tests,org.eclipse.jdt.core.tests.builder,org.eclipse.jdt.core.tests.builder.mockcompiler -am
-
-# 2. Build JDT UI test bundles
+# 1. Build JDT UI test bundles
 git clone https://github.com/eclipse-jdt/eclipse.jdt.ui.git
 cd eclipse.jdt.ui
 mvn install -DskipTests -pl org.eclipse.jdt.ui.tests -am
 
-# 3. Now build jdt.javac
+# 2. Now build jdt.javac
 cd /path/to/eclipse.jdt.javac
 mvn clean install
 ```
 
-**CI builds** automatically build these dependencies in the Jenkinsfile, so no manual steps are needed in CI.
+**Note:** JDT Core test bundles (`org.eclipse.jdt.core.tests.compiler`, `org.eclipse.jdt.core.tests.model`, etc.) are automatically resolved from the forked JDT Core CI build P2 repository and do not need to be built manually.
+
+**CI builds** automatically build all dependencies in the Jenkinsfile, so no manual steps are needed in CI.
 
 ### ⌨️ Contribute
 
