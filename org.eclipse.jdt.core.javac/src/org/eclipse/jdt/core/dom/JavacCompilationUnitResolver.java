@@ -255,6 +255,47 @@ public class JavacCompilationUnitResolver implements ICompilationUnitResolver {
 		}
 		return null;
 	}
+	private static boolean hasModuleBindingKeys(String[] bindingKeys) {
+		if (bindingKeys == null) {
+			return false;
+		}
+		for (String key : bindingKeys) {
+			if (key != null && key.startsWith("\"")) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private ICompilationUnit createMockModuleInfoUnit(IJavaProject project, String[] bindingKeys, IProgressMonitor monitor) {
+		try {
+			for (IPackageFragmentRoot root : project.getPackageFragmentRoots()) {
+				if (root.getResource() instanceof IFolder) {
+					IPackageFragment pack = root.getPackageFragment("");
+					ICompilationUnit mockUnit = pack.getCompilationUnit("module-info.java");
+					mockUnit.becomeWorkingCopy(monitor);
+
+					StringBuilder contents = new StringBuilder();
+					contents.append("module mock.module {\n");
+					for (String key : bindingKeys) {
+						if (key != null && key.startsWith("\"")) {
+							String moduleName = key.substring(1);
+							if (!moduleName.isEmpty()) {
+								contents.append("    requires ").append(moduleName).append(";\n");
+							}
+						}
+					}
+					contents.append("}\n");
+
+					mockUnit.getBuffer().setContents(contents.toString());
+					return mockUnit;
+				}
+			}
+		} catch (JavaModelException ex) {
+			ILog.get().error(ex.getMessage(), ex);
+		}
+		return null;
+	}
 
 	@Override
 	public void resolve(ICompilationUnit[] compilationUnits, String[] bindingKeys, ASTRequestor requestor, int apiLevel,
@@ -265,35 +306,41 @@ public class JavacCompilationUnitResolver implements ICompilationUnitResolver {
 		for (int i = 0; i < bindingKeys.length; i++) {
 			CustomBindingKeyParser bkp = new CustomBindingKeyParser(bindingKeys[i]);
 			bkp.parse(true);
-			int lastDot = bkp.compoundName.lastIndexOf('.');
-			String packageName = lastDot == -1 ? "" : bkp.compoundName.substring(0, lastDot);
-			String simpleName = lastDot == -1 ? bkp.compoundName : bkp.compoundName.substring(lastDot + 1);
-			// find package
-			try {
-				for (IPackageFragmentRoot root : project.getPackageFragmentRoots()) {
-					if (root.getResource() instanceof IFolder) {
-						IPackageFragment pack = root.getPackageFragment(packageName);
-						ICompilationUnit a = pack.getCompilationUnit(simpleName + ".java");
-						if (a.exists()) {
-							additionalUnits.add(a);
-							break;
+			if (bkp.compoundName != null && !bkp.compoundName.isEmpty()) {
+				int lastDot = bkp.compoundName.lastIndexOf('.');
+				String packageName = lastDot == -1 ? "" : bkp.compoundName.substring(0, lastDot);
+				String simpleName = lastDot == -1 ? bkp.compoundName : bkp.compoundName.substring(lastDot + 1);
+				try {
+					for (IPackageFragmentRoot root : project.getPackageFragmentRoots()) {
+						if (root.getResource() instanceof IFolder) {
+							IPackageFragment pack = root.getPackageFragment(packageName);
+							ICompilationUnit a = pack.getCompilationUnit(simpleName + ".java");
+							if (a.exists()) {
+								additionalUnits.add(a);
+								break;
+							}
 						}
 					}
+				} catch (JavaModelException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
 				}
-			} catch (JavaModelException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
 			}
 		}
 
-		ICompilationUnit mockUnit = compilationUnits.length == 0 && additionalUnits.size() == 0 && bindingKeys.length > 0 ? createMockUnit(project, monitor) : null;
+		ICompilationUnit mockUnit = null;
+		if (compilationUnits.length == 0 && additionalUnits.size() == 0 && bindingKeys.length > 0) {
+			mockUnit = hasModuleBindingKeys(bindingKeys)
+					? createMockModuleInfoUnit(project, bindingKeys, monitor)
+					: createMockUnit(project, monitor);
+		}
 		if (mockUnit != null) {
 			// if we're looking for a key in a binary type and have no actual unit,
 			// create a mock to activate some compilation task, enable a bindingResolver
 			// and then allow looking up the binary types too
 			compilationUnits = new ICompilationUnit[] { mockUnit };
 		}
-
+		final ICompilationUnit finalMockUnit = mockUnit;
 		ICompilationUnit[] combinedUnits = new ICompilationUnit[compilationUnits.length + additionalUnits.size()];
 		System.arraycopy(compilationUnits, 0, combinedUnits, 0, compilationUnits.length);
 		for (int i = compilationUnits.length; i < combinedUnits.length; i++) {
@@ -313,14 +360,14 @@ public class JavacCompilationUnitResolver implements ICompilationUnitResolver {
 					bindingResolver[0] = javacBindingResolver;
 				}
 				resolveBindings(b, bindingMap, apiLevel);
-				if (!Objects.equals(a, mockUnit)) {
+				if (!Objects.equals(a, finalMockUnit)) {
 					requestor.acceptAST(a,b);
 				}
 			});
 
 			resolveRequestedBindingKeys(bindingResolver[0], bindingKeys,
 					(a,b) -> {
-						if (b != null || mockUnit != null) {
+						if (b != null || finalMockUnit != null) {
 							requestor.acceptBinding(a,b);
 						}
 					}, new Classpath[0], // TODO need some classpaths
@@ -362,25 +409,55 @@ public class JavacCompilationUnitResolver implements ICompilationUnitResolver {
 					binding = elementBinding;
 				}
 			}
+
 			if (binding == null) {
-				CustomBindingKeyParser bkp = new CustomBindingKeyParser(bindingKey);
-				bkp.parse(true);
-				ITypeBinding type = bindingResolver.resolveTypeFromContext(bkp.compoundName);
-				if (type != null) {
-					if (Objects.equals(bindingKey, type.getKey())) {
-						binding = type;
-					} else {
-						binding = Stream.of(type.getDeclaredMethods(), type.getDeclaredFields())
-							.flatMap(Arrays::stream)
-							.filter(b -> Objects.equals(b.getKey(), bindingKey))
-							.findAny()
-							.orElse(null);
+				if (bindingKey != null && bindingKey.startsWith("\"")) {
+					binding = resolveModuleBinding(bindingKey, units);
+				} else {
+					CustomBindingKeyParser bkp = new CustomBindingKeyParser(bindingKey);
+					bkp.parse(true);
+					if (bkp.compoundName != null && !bkp.compoundName.isEmpty()) {
+						ITypeBinding type = bindingResolver.resolveTypeFromContext(bkp.compoundName);
+						if (type != null) {
+							if (Objects.equals(bindingKey, type.getKey())) {
+								binding = type;
+							} else {
+								binding = Stream.of(type.getDeclaredMethods(), type.getDeclaredFields())
+									.flatMap(Arrays::stream)
+									.filter(b -> Objects.equals(b.getKey(), bindingKey))
+									.findAny()
+									.orElse(null);
+							}
+						}
 					}
 				}
 			}
 			requestor.acceptBinding(bindingKey, binding);
 		}
+	}
 
+	private IBinding resolveModuleBinding(String bindingKey, Collection<CompilationUnit> units) {
+		for (CompilationUnit unit : units) {
+			if (unit.getModule() == null) {
+				continue;
+			}
+
+			IModuleBinding mb = unit.getModule().resolveBinding();
+			if (mb == null) {
+				continue;
+			}
+
+			if (Objects.equals(bindingKey, mb.getKey())) {
+				return mb;
+			}
+
+			for (IModuleBinding req : mb.getRequiredModules()) {
+				if (req != null && Objects.equals(bindingKey, req.getKey())) {
+					return req;
+				}
+			}
+		}
+		return null;
 	}
 
 	private static class CustomBindingKeyParser extends BindingKeyParser {
